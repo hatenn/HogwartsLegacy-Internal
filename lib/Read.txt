@@ -1,0 +1,1 @@
+You have to compile minhook and link against it
