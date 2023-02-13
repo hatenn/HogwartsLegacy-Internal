@@ -1153,10 +1153,6 @@ namespace tinySDK
 	//SDK::ULocalPlayer* m_LocalPlayer;
 	uintptr_t g_GNames;
 
-	//Additional
-	float centerX = 960.0;
-	float centerY = 540.0;
-
 	//Initializing variables
 	FNamePool* FName::GNames = nullptr;
 	TUObjectArray* UObject::GObjects = nullptr;    
