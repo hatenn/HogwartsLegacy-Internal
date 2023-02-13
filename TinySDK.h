@@ -918,15 +918,12 @@ namespace tinySDK
 
 	void ACharacter::Jump()
 	{
-		static UFunction* fn = nullptr;
-		if (!fn)
-			fn = UObject::FindObject<UFunction>("Function Engine.Character.Jump");
+
+		static auto fn = UObject::FindObject<UFunction>("Function Engine.Character.Jump");
 
 		struct {}params;
 
-		auto flags = fn->FunctionFlags;
 		UObject::ProcessEvent(fn, &params);
-		fn->FunctionFlags = flags;
 	}
 
 	int32_t TUObjectArray::Count() const
