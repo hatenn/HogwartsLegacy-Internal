@@ -4,6 +4,22 @@
 #include "TinySDK.h"
 #include <iostream>
 
+//Minhook dependencies
+#include "MinHook.h"
+#pragma comment(lib, "libMinHook.x64.lib")
+
+//ProcessEvent Prototype
+typedef void(__stdcall* fnProcessEvent)(void* Object, tinySDK::UFunction* Function, void* Params);
+fnProcessEvent process_event;
+fnProcessEvent process_event_original;
+
+void ProcessEventHook(void* Object, tinySDK::UFunction* Function, void* Params)
+{
+    //Do anything you want
+    //std::cout << Function->GetFullName() << std::endl;
+
+    return process_event(Object, Function, Params);
+}
 
 void __stdcall GetOffsets() {
     tinySDK::BaseAddress = (DWORD_PTR)GetModuleHandle(nullptr);
@@ -11,9 +27,16 @@ void __stdcall GetOffsets() {
 
     std::cout << "ModuleBase: " << std::hex << tinySDK::BaseAddress << std::endl;
     
-    //928db88
-    uintptr_t uworldAdressPtr = (tinySDK::BaseAddress + 0x928db88);
-    tinySDK::m_UWorld = (tinySDK::UWorld**)uworldAdressPtr;
+    //Basic Offsets
+    tinySDK::UObject::GObjects = reinterpret_cast<tinySDK::TUObjectArray*>(tinySDK::BaseAddress + 0x90D9100);
+    tinySDK::FName::GNames = reinterpret_cast<tinySDK::FNamePool*>(tinySDK::BaseAddress + 0x909CD00);
+    tinySDK::m_UWorld = reinterpret_cast<tinySDK::UWorld**>(tinySDK::BaseAddress + 0x928db88);
+
+    // ProcessEvent
+    auto localPlayer = (*tinySDK::m_UWorld)->PersistentLevel->OwningWorld->OwningGameInstance->LocalPlayers.Data[0];
+    void** vmtLocalPlayer = *reinterpret_cast<void***>(localPlayer);
+    process_event = reinterpret_cast<fnProcessEvent>(vmtLocalPlayer[68]);
+    process_event_original = process_event;
 }
 
 //main hack thread created on the DllMain
@@ -24,6 +47,25 @@ void HackThread(HMODULE hModule) {
     freopen("CONOUT$", "w", stdout);
 
     GetOffsets();
+
+    // Initialize MinHook.
+    if (MH_Initialize() != MH_OK)
+    {
+        std::cout << "Failed to initialize Minhook!" << std::endl;
+    }
+
+    //Hooking ProcessEvent
+    if (MH_CreateHook(process_event, ProcessEventHook, (LPVOID*)&process_event) != MH_OK)
+    {
+        std::cout << "C Hook failed: 1" << std::endl;
+        //return;
+    }
+
+    // Enable the hook for Process Event
+    if (MH_EnableHook(process_event_original) != MH_OK)
+    {
+        std::cout << "Hook failed: 1" << std::endl;
+    }
 
     while (!GetAsyncKeyState(VK_END)) {
 
@@ -51,11 +93,29 @@ void HackThread(HMODULE hModule) {
         if (localMovementComp == nullptr)
             continue;
 
+        if(GetAsyncKeyState(VK_MBUTTON) & 1){
+            //Just an example, you have to add your own functions to the SDK
+            localChar->Jump();
+        }
+
     }
-    std::cout << "Exit" << std::endl;
+
+    // Disable the hook
+    if (MH_DisableHook(process_event_original) != MH_OK)
+    {
+        std::cout << "ERROR: Disabling hook" << std::endl;
+    }
+
+
     Sleep(100);
+    if (MH_Uninitialize() != MH_OK);
+    Sleep(100);
+    std::cout << "Exiting..." << std::endl;
     FreeConsole();
+    Sleep(100);
     FreeLibraryAndExitThread(hModule, 0);
+    Sleep(100);
+
 }
 
 //Used to attach the dll to the process we inject to

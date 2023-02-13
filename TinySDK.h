@@ -2,6 +2,8 @@
 #include <Windows.h>
 #include <Psapi.h>
 #include <stdint.h>
+#include <string>
+#include <unordered_set>
 
 namespace tinySDK
 {
@@ -15,6 +17,159 @@ namespace tinySDK
 		MOVE_Flying = 5,
 		MOVE_Custom = 6,
 		MOVE_MAX = 7
+	};
+
+	struct FPointer
+	{
+		uintptr_t Dummy;
+	};
+
+	struct FQWord
+	{
+		int A;
+		int B;
+	};
+
+	template<class T>
+	class TArray
+	{
+	public:
+		T* Data;
+		int Count;
+		int Max;
+	};
+
+
+	class FString : public TArray<wchar_t>
+	{
+	public:
+		FString();
+		FString(const wchar_t* other);
+		const wchar_t* wc_str() const;
+		const char* c_str() const;
+		bool IsValid() const;
+		std::string ToString() const;
+		std::wstring ToStringW() const;
+	};
+
+
+	class FUObjectItem
+	{
+	public:
+		class UObject* Object;                                                  // 0x0000(0x0008)
+		int32_t                                                    Flags;                                                   // 0x0008(0x0004)
+		int32_t                                                    ClusterIndex;                                            // 0x000C(0x0004)
+		int32_t                                                    SerialNumber;                                            // 0x0010(0x0004)
+		unsigned char                                              pad_BXEK2KRZ3X[0x04];                                    // 0x0014(0x0004)
+
+	public:
+		bool IsUnreachable() const;
+		bool IsPendingKill() const;
+	};
+
+
+	class TUObjectArray
+	{
+	private:
+		static const constexpr int32_t                             NumElementsPerChunk = 64 * 1024;                         // 0x0000(0x0000)
+		FUObjectItem** Objects;                                                 // 0x0000(0x0000)
+		FUObjectItem* PreAllocatedObjects;                                     // 0x0000(0x0000)
+	public:
+		int32_t                                                    MaxElements;                                             // 0x0000(0x0000)
+		int32_t                                                    NumElements;                                             // 0x0000(0x0000)
+		int32_t                                                    MaxChunks;                                               // 0x0000(0x0000)
+		int32_t                                                    NumChunks;                                               // 0x0000(0x0000)
+
+	public:
+		int32_t Count() const;
+		int32_t Max() const;
+		bool IsValidIndex(int32_t Index) const;
+		FUObjectItem* GetObjectPtr(int32_t Index) const;
+		UObject* GetByIndex(int32_t index) const;
+		FUObjectItem* GetItemByIndex(int32_t index) const;
+		UObject* operator[](int32_t i);
+		const UObject* operator[](int32_t i) const;
+	};
+
+	class FNameEntryHeader
+	{
+	public:
+		static const constexpr uint32_t                            ProbeHashBits = 5;                                       // 0x0000(0x0000)
+		uint16_t                                                   bIsWide : 1;                                             // 0x0000(0x0000)
+		uint16_t                                                   LowercaseProbeHash : ProbeHashBits;                      // 0x0000(0x0000)
+		uint16_t                                                   Len : 10;                                                // 0x0000(0x0000)
+	};
+
+
+	class FNameEntry
+	{
+	public:
+		FNameEntryHeader                                           Header;                                                  // 0x0000(0x0000)
+		union
+		{
+			char                                                      AnsiName[1024];                                          // 0x0000(0x0000)
+			wchar_t                                                   WideName[1024];                                          // 0x0000(0x0000)
+		};
+
+	public:
+		int32_t GetLength() const;
+		bool IsWide() const;
+		int32_t GetId() const;
+		std::string GetAnsiName() const;
+		std::wstring GetWideName() const;
+		std::string GetName() const;
+	};
+
+
+	class FNameEntryAllocator
+	{
+	private:
+		uint8_t                                                    FrwLock[0x8];                                            // 0x0000(0x0000)
+	public:
+		static const constexpr int32_t                             Stride = 0x02;                                           // 0x0000(0x0000)
+		static const constexpr int32_t                             MaxOffset = Stride * (1 << 16);                          // 0x0000(0x0000)
+		int32_t                                                    CurrentBlock;                                            // 0x0000(0x0000)
+		int32_t                                                    CurrentByteCursor;                                       // 0x0000(0x0000)
+		uint8_t* Blocks[8192];                                            // 0x0000(0x0000)
+
+	public:
+		int32_t NumBlocks() const;
+		FNameEntry* GetById(int32_t key) const;
+		bool IsValidIndex(int32_t key) const;
+		bool IsValidIndex(int32_t key, uint32_t block, uint16_t offset) const;
+	};
+
+	class FNamePool
+	{
+	public:
+		FNameEntryAllocator                                        Allocator;                                               // 0x0000(0x0000)
+		int32_t                                                    AnsiCount;                                               // 0x0000(0x0000)
+		int32_t                                                    WideCount;                                               // 0x0000(0x0000)
+
+	public:
+		FNameEntry* GetNext(uintptr_t& nextFNameAddress, uint32_t* comparisonId) const;
+		int32_t Count() const;
+		bool IsValidIndex(int32_t index) const;
+		FNameEntry* GetById(int32_t id) const;
+		FNameEntry* operator[](int32_t id) const;
+	};
+
+	class FName
+	{
+	public:
+		static FNamePool* GNames;                                                  // 0x0000(0x0000)
+		int32_t                                                    ComparisonIndex;                                         // 0x0000(0x0000)
+		int32_t                                                    Number;                                                  // 0x0000(0x0000)
+
+	public:
+		FName();
+		FName(int32_t i);
+		FName(const char* nameToFind);
+		FName(const wchar_t* nameToFind);
+		static FNamePool& GetGlobalNames();
+		std::string GetNameA() const;
+		std::wstring GetNameW() const;
+		std::string GetName() const;
 	};
 
 	struct FVector
@@ -31,17 +186,338 @@ namespace tinySDK
 		float                                              Roll;
 	};
 
-	struct UObject {
-		char pad_0[0x28]; // 0x00(0x28)
-	};
-
-	template<class T>
-	class TArray
+	template<typename KeyType, typename ValueType>
+	class TPair
 	{
 	public:
-		T* Data;
-		int Count;
-		int Max;
+		KeyType   Key;
+		ValueType Value;
+	};
+
+	class UObject;
+
+	class FScriptInterface
+	{
+	private:
+		UObject* ObjectPointer;
+		void* InterfacePointer;
+
+	public:
+		UObject* GetObject() const
+		{
+			return ObjectPointer;
+		}
+
+		UObject*& GetObjectRef()
+		{
+			return ObjectPointer;
+		}
+
+		void* GetInterface() const
+		{
+			return ObjectPointer != nullptr ? InterfacePointer : nullptr;
+		}
+	};
+
+	template<class InterfaceType>
+	class TScriptInterface : public FScriptInterface
+	{
+	public:
+		InterfaceType* operator->() const
+		{
+			return (InterfaceType*)GetInterface();
+		}
+
+		InterfaceType& operator*() const
+		{
+			return *((InterfaceType*)GetInterface());
+		}
+
+		operator bool() const
+		{
+			return GetInterface() != nullptr;
+		}
+
+	};
+
+	struct FText
+	{
+		char UnknownData[0x18];
+	};
+
+	struct FWeakObjectPtr
+	{
+		int32_t ObjectIndex;
+		int32_t ObjectSerialNumber;
+	};
+
+	struct FStringAssetReference
+	{
+		FString AssetLongPathname;
+	};
+
+	template<typename TObjectID>
+	class TPersistentObjectPtr
+	{
+	public:
+		FWeakObjectPtr WeakPtr;
+		int32_t TagAtLastTest;
+		TObjectID ObjectID;
+	};
+
+	struct FSoftObjectPath
+	{
+		FName AssetPathName;
+		FString SubPathString;
+	};
+
+	class FSoftObjectPtr : public TPersistentObjectPtr<FSoftObjectPath>
+	{
+
+	};
+
+	class FAssetPtr : public TPersistentObjectPtr<FStringAssetReference>
+	{
+
+	};
+
+	struct FGuid
+	{
+		uint32_t A;
+		uint32_t B;
+		uint32_t C;
+		uint32_t D;
+	};
+
+	struct FUniqueObjectGuid
+	{
+		FGuid Guid;
+	};
+
+	class FLazyObjectPtr : public TPersistentObjectPtr<FUniqueObjectGuid>
+	{
+
+	};
+
+	struct FScriptDelegate
+	{
+		unsigned char UnknownData[20];
+	};
+
+	struct FScriptMulticastDelegate
+	{
+		unsigned char UnknownData[16];
+	};
+
+	class UClass;
+	
+	class UObject
+	{
+	public:
+		static class TUObjectArray* GObjects;                                                
+		void* VfTable;                                                 
+		int32_t                                                    Flags;                                                   
+		int32_t                                                    InternalIndex;                                           
+		class UClass* Class;                                                   
+		FName                                                      Name;                                                    
+		class UObject* Outer;                                                  
+
+	public:
+		static TUObjectArray& GetGlobalObjects();
+		std::string GetName() const;
+		std::string GetFullName() const;
+		template<typename T>
+		static T* FindObject(const std::string& name)
+		{
+			for (int32_t i = 0; i < UObject::GetGlobalObjects().Count(); ++i)
+			{
+				auto object = UObject::GetGlobalObjects().GetByIndex(i);
+
+				if (!object)
+					continue;
+
+				if (object->GetFullName() == name)
+					return static_cast<T*>(object);
+			}
+			return nullptr;
+		}
+
+		template<typename T>
+		static T* FindObject()
+		{
+			auto v = T::StaticClass();
+			for (int32_t i = 0; i < UObject::GetGlobalObjects().Count(); ++i)
+			{
+				auto object = UObject::GetGlobalObjects().GetByIndex(i);
+
+				if (!object)
+					continue;
+
+				if (object->IsA(v))
+					return static_cast<T*>(object);
+			}
+			return nullptr;
+		}
+
+		template<typename T>
+		static std::vector<T*> FindObjects(const std::string& name)
+		{
+			std::vector<T*> ret;
+			for (int32_t i = 0; i < UObject::GetGlobalObjects().Count(); ++i)
+			{
+				auto object = UObject::GetGlobalObjects().GetByIndex(i);
+
+				if (!object)
+					continue;
+
+				if (object->GetFullName() == name)
+					ret.push_back(static_cast<T*>(object));
+			}
+			return ret;
+		}
+
+		template<typename T>
+		static std::vector<T*> FindObjects()
+		{
+			std::vector<T*> ret;
+			auto v = T::StaticClass();
+			for (int i = 0; i < UObject::GetGlobalObjects().Count(); ++i)
+			{
+				auto object = UObject::GetGlobalObjects().GetByIndex(i);
+
+				if (!object)
+					continue;
+
+				if (object->IsA(v))
+					ret.push_back(static_cast<T*>(object));
+			}
+			return ret;
+		}
+
+		static UClass* FindClass(const std::string& name);
+		template<typename T>
+		static T* GetObjectCasted(size_t index)
+		{
+			return static_cast<T*>(UObject::GetGlobalObjects().GetByIndex(index));
+		}
+
+		bool IsA(UClass* cmp) const;
+		void ExecuteUbergraph(int32_t EntryPoint);
+		void ProcessEvent(class UFunction* function, void* parms);
+		static UClass* StaticClass();
+	};
+
+	// (0x28 - 0x30) 
+	class UField : public UObject
+	{
+	public:
+		UField* Next;
+	};
+
+	class UEnum : public UField
+	{
+	public:
+		FString CppType; //0x0030 
+		TArray<TPair<FName, uint64_t>> Names; //0x0040 
+		__int64 CppForm; //0x0050 
+	};
+
+	class UStruct : public UField
+	{
+	public:
+		UStruct* SuperField;
+		UField* Children;
+		int32_t PropertySize;
+		int32_t MinAlignment;
+		char pad_0x0048[0x40];
+	};
+
+	class UClass : public UStruct
+	{
+	public:
+		unsigned char                                              UnknownData_Z0DU[0x180];                                 // 0x00B0(0x0180) MISSED OFFSET (PADDING)
+
+	public:
+		template<typename T>
+		T* CreateDefaultObjectOfType()
+		{
+			return static_cast<T*>(CreateDefaultObject());
+		}
+
+		UObject* CreateDefaultObject();
+		static UClass* StaticClass();
+	};
+
+	template<typename Fn>
+	Fn GetVFunction(const void* instance, size_t index)
+	{
+		auto vtable = *static_cast<const void***>(const_cast<void*>(instance));
+		return reinterpret_cast<Fn>(const_cast<void(*)>(vtable[index]));
+	}
+
+
+	TUObjectArray& UObject::GetGlobalObjects()
+	{
+		return *GObjects;
+	}
+
+
+	std::string UObject::GetName() const
+	{
+		std::string name(Name.GetName());
+		if (Name.Number > 0)
+			name += '_' + std::to_string(Name.Number);
+		auto pos = name.rfind('/');
+		if (pos == std::string::npos)
+			return name;
+		return name.substr(pos + 1);
+	}
+
+
+	std::string UObject::GetFullName() const
+	{
+		std::string name;
+		if (Class != nullptr)
+		{
+			std::string temp;
+			for (auto p = Outer; p; p = p->Outer)
+			{
+				temp = p->GetName() + "." + temp;
+			}
+			name = Class->GetName();
+			name += " ";
+			name += temp;
+			name += GetName();
+		}
+		return name;
+	}
+
+	UClass* UObject::FindClass(const std::string& name)
+	{
+		return FindObject<UClass>(name);
+	}
+
+	bool UObject::IsA(UClass* cmp) const
+	{
+		for (auto super = Class; super; super = static_cast<UClass*>(super->SuperField))
+		{
+			if (super == cmp)
+				return true;
+		}
+
+		return false;
+	}
+
+	void UObject::ProcessEvent(class UFunction* function, void* parms)
+	{
+		GetVFunction<void(*)(UObject*, class UFunction*, void*)>(this, 0x44)(this, function, parms);
+	}
+
+
+	class UScriptStruct : public UStruct
+	{
+	public:
+		char pad_0x0088[0x10]; //0x0088
 	};
 
 	struct AActor : UObject {
@@ -271,6 +747,8 @@ namespace tinySDK
 		int32_t JumpCurrentCountPreJump; // 0x36c(0x04)
 		char pad_370[0x8]; // 0x370(0x08)
 		char otherSize[0x168]; // 0x378(0x168)
+
+		void Jump();
 	};
 
 	// Class Engine.Controller
@@ -420,11 +898,260 @@ namespace tinySDK
 		unsigned char padding1[0x238]; // 0xC8(0x238)
 	};
 
+	class UFunction : public UStruct
+	{
+	public:
+		int32_t                                                    FunctionFlags;                                           
+		int16_t                                                    RepOffset;                                               
+		int8_t                                                     NumParms;                                                
+		unsigned char                                              pad_YK6JXED6AT[0x01];                                    
+		uint16_t                                                   ParmsSize;                                               
+		uint16_t                                                   ReturnValueOffset;                                       
+		uint16_t                                                   RPCId;                                                   
+		uint16_t                                                   RPCResponseId;                                           
+		class FProperty* FirstPropertyToInit;                                     
+		class UFunction* EventGraphFunction;                                      
+		int32_t                                                    EventGraphCallOffset;                                    
+		unsigned char                                              pad_8SXL1DKMQG[0x04];                                    
+		void* Func;                                                    
+	};
+
+	void ACharacter::Jump()
+	{
+		static UFunction* fn = nullptr;
+		if (!fn)
+			fn = UObject::FindObject<UFunction>("Function Engine.Character.Jump");
+
+		struct {}params;
+
+		auto flags = fn->FunctionFlags;
+		UObject::ProcessEvent(fn, &params);
+		fn->FunctionFlags = flags;
+	}
+
+	int32_t TUObjectArray::Count() const
+	{
+		return NumElements;
+	}
+
+	int32_t TUObjectArray::Max() const
+	{
+		return MaxElements;
+	}
+
+	bool TUObjectArray::IsValidIndex(int32_t Index) const
+	{
+		return Index < Count() && Index >= 0;
+	}
+
+	FUObjectItem* TUObjectArray::GetObjectPtr(int32_t Index) const
+	{
+		const int32_t ChunkIndex = Index / NumElementsPerChunk;
+		const int32_t WithinChunkIndex = Index % NumElementsPerChunk;
+		if (!IsValidIndex(Index)) return nullptr;
+		if (ChunkIndex > NumChunks) return nullptr;
+		if (Index > MaxElements) return nullptr;
+		FUObjectItem* Chunk = Objects[ChunkIndex];
+		if (!Chunk) return nullptr;
+		return Chunk + WithinChunkIndex;
+	}
+
+	UObject* TUObjectArray::GetByIndex(int32_t index) const
+	{
+		FUObjectItem* ItemPtr = GetObjectPtr(index);
+		if (!ItemPtr) return nullptr;
+		return (*ItemPtr).Object;
+	}
+
+	FUObjectItem* TUObjectArray::GetItemByIndex(int32_t index) const
+	{
+		FUObjectItem* ItemPtr = GetObjectPtr(index);
+		if (!ItemPtr) return nullptr;
+		return ItemPtr;
+	}
+
+	UObject* TUObjectArray::operator[](int32_t i)
+	{
+		return GetByIndex(i);
+	}
+
+	const UObject* TUObjectArray::operator[](int32_t i) const
+	{
+		return GetByIndex(i);
+	}
+
+	int32_t FNameEntry::GetLength() const
+	{
+		return Header.Len;
+	}
+
+	bool FNameEntry::IsWide() const
+	{
+		return Header.bIsWide;
+	}
+
+	int32_t FNameEntry::GetId() const
+	{
+		throw std::exception("ERROR");
+	}
+
+	std::string FNameEntry::GetAnsiName() const
+	{
+		uint32_t len = GetLength();
+		if (len > 1024) return "ERROR";
+		return std::string((const char*)AnsiName, len);
+	}
+
+	std::wstring FNameEntry::GetWideName() const
+	{
+		uint32_t len = GetLength();
+		return std::wstring((const wchar_t*)WideName, len);
+	}
+
+	std::string FNameEntry::GetName() const
+	{
+		return GetAnsiName();
+	}
+
+	int32_t FNameEntryAllocator::NumBlocks() const
+	{
+		return CurrentBlock + 1;
+	}
+
+	FNameEntry* FNameEntryAllocator::GetById(int32_t key) const
+	{
+		int block = key >> 16;
+		int offset = (uint16_t)key;
+		if (!IsValidIndex(key, block, offset))
+			return reinterpret_cast<FNameEntry*>(Blocks[0] + 0); // "None"
+		return reinterpret_cast<FNameEntry*>(Blocks[block] + ((uint64_t)offset * Stride));
+	}
+
+	bool FNameEntryAllocator::IsValidIndex(int32_t key) const
+	{
+		uint32_t block = key >> 16;
+		uint16_t offset = key;
+		return IsValidIndex(key, block, offset);
+	}
+
+	bool FNameEntryAllocator::IsValidIndex(int32_t key, uint32_t block, uint16_t offset) const
+	{
+		return (key >= 0 && block < static_cast<uint32_t>(NumBlocks()) && offset* Stride < MaxOffset);
+	}
+
+	int32_t FNamePool::Count() const
+	{
+		return AnsiCount;
+	}
+
+
+	bool FNamePool::IsValidIndex(int32_t index) const
+	{
+		return Allocator.IsValidIndex(static_cast<int32_t>(index));
+	}
+
+
+	FNameEntry* FNamePool::GetById(int32_t id) const
+	{
+		return Allocator.GetById(id);
+	}
+
+
+	FNameEntry* FNamePool::operator[](int32_t id) const
+	{
+		return GetById(id);
+	}
+
+
+	FName::FName()
+	{
+		ComparisonIndex = 0;
+		Number = 0;
+	}
+
+
+	FName::FName(int32_t i)
+	{
+		ComparisonIndex = i;
+		Number = 0;
+	}
+
+	FName::FName(const char* nameToFind)
+	{
+		Number = 0;
+		static std::unordered_set<int> cache;
+		for (auto i : cache)
+		{
+			if (GetGlobalNames()[i]->GetAnsiName() == nameToFind)
+			{
+				ComparisonIndex = i;
+				return;
+			}
+		}
+	}
+
+
+	FName::FName(const wchar_t* nameToFind)
+	{
+		Number = 0;
+		static std::unordered_set<int> cache;
+		for (auto i : cache)
+		{
+			if (GetGlobalNames()[i]->GetWideName() == nameToFind)
+			{
+				ComparisonIndex = i;
+				return;
+			}
+		}
+	}
+
+
+	FNamePool& FName::GetGlobalNames()
+	{
+		return *GNames;
+	}
+
+
+	std::string FName::GetNameA() const
+	{
+		return GetGlobalNames()[ComparisonIndex]->GetAnsiName();
+	}
+
+
+	std::wstring FName::GetNameW() const
+	{
+		return GetGlobalNames()[ComparisonIndex]->GetWideName();
+	}
+
+	std::string FName::GetName() const
+	{
+		return GetNameA();
+	}
+
+	class UScriptViewportClient : public UObject
+	{
+	public:
+		unsigned char                                              padding1[0x10];                                  // 0x0028(0x0010) MISSED OFFSET (PADDING)
+	};
+
+	class UGameViewportClient : public UScriptViewportClient
+	{
+	public:
+		unsigned char                                              UnknownData_9DM8[0x8];                                   // 0x0038(0x0008) MISSED OFFSET (FIX SPACE BETWEEN PREVIOUS PROPERTY)
+		class UConsole* ViewportConsole;                                         // 0x0040(0x0008) ZeroConstructor, IsPlainOldData, NoDestructor, HasGetValueTypeHash, NativeAccessSpecifierPublic
+		TArray<struct FDebugDisplayProperty>                       DebugProperties;                                         // 0x0048(0x0010) ZeroConstructor, NativeAccessSpecifierPublic
+		unsigned char                                              UnknownData_KXXF[0x10];                                  // 0x0058(0x0010) MISSED OFFSET (FIX SPACE BETWEEN PREVIOUS PROPERTY)
+		int32_t                                                    MaxSplitscreenPlayers;                                   // 0x0068(0x0004) ZeroConstructor, Config, IsPlainOldData, NoDestructor, HasGetValueTypeHash, NativeAccessSpecifierPublic
+		unsigned char                                              UnknownData_YPWH[0xC];                                   // 0x006C(0x000C) MISSED OFFSET (FIX SPACE BETWEEN PREVIOUS PROPERTY)
+		class UWorld* World;                                                   // 0x0078(0x0008) ZeroConstructor, IsPlainOldData, NoDestructor, Protected, HasGetValueTypeHash, NativeAccessSpecifierProtected
+		class UGameInstance* GameInstance;                                            // 0x0080(0x0008) ZeroConstructor, IsPlainOldData, NoDestructor, Protected, HasGetValueTypeHash, NativeAccessSpecifierProtected
+		unsigned char                                              UnknownData_KJQL[0x2D8];                                 // 0x0088(0x02D8) MISSED OFFSET (PADDING)
+	};
+
 	//Essential Variables
 	DWORD_PTR BaseAddress;
 	HMODULE Handle;
 	MODULEINFO info;
-	UWorld** m_UWorld;
 	ULevel* m_PersistentLevel;
 	//SDK::ULocalPlayer* m_LocalPlayer;
 	uintptr_t g_GNames;
@@ -433,4 +1160,8 @@ namespace tinySDK
 	float centerX = 960.0;
 	float centerY = 540.0;
 
+	//Initializing variables
+	FNamePool* FName::GNames = nullptr;
+	TUObjectArray* UObject::GObjects = nullptr;    
+	UWorld** m_UWorld = nullptr;
 }
