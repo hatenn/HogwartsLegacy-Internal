@@ -28,9 +28,9 @@ void __stdcall GetOffsets() {
     std::cout << "ModuleBase: " << std::hex << tinySDK::BaseAddress << std::endl;
     
     //Basic Offsets
-    tinySDK::UObject::GObjects = reinterpret_cast<tinySDK::TUObjectArray*>(tinySDK::BaseAddress + 0x90D9100);
-    tinySDK::FName::GNames = reinterpret_cast<tinySDK::FNamePool*>(tinySDK::BaseAddress + 0x909CD00);
-    tinySDK::m_UWorld = reinterpret_cast<tinySDK::UWorld**>(tinySDK::BaseAddress + 0x928db88);
+    tinySDK::UObject::GObjects = reinterpret_cast<tinySDK::TUObjectArray*>(tinySDK::BaseAddress + 0x90B9420);
+    tinySDK::FName::GNames = reinterpret_cast<tinySDK::FNamePool*>(tinySDK::BaseAddress + 0x907D040);
+    tinySDK::m_UWorld = reinterpret_cast<tinySDK::UWorld**>(tinySDK::BaseAddress + 0x926DA38);
 
     // ProcessEvent
     auto localPlayer = (*tinySDK::m_UWorld)->PersistentLevel->OwningWorld->OwningGameInstance->LocalPlayers.Data[0];
@@ -93,9 +93,13 @@ void HackThread(HMODULE hModule) {
         if (localMovementComp == nullptr)
             continue;
 
+        auto localBipedChar = reinterpret_cast<tinySDK::ABiped_Player*>(localChar);
+
+
         if(GetAsyncKeyState(VK_MBUTTON) & 1){
             //Just an example, you have to add your own functions to the SDK
-            localChar->Jump();
+            std::cout << "Adding 50 health..." << std::endl;
+            localBipedChar->AdjustHealth(50, true);
         }
 
     }
